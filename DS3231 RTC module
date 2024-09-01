@@ -89,7 +89,7 @@ byte ledIntensitySelect(int value) {
 String outputStrClock() {
   DateTime now = rtc.now();
   char buffer[40];
-  snprintf(buffer, sizeof(buffer), "%02d/%02d/%04d %02d:%02d:%02d Temp:%0dC RH:%d%%", 
+  snprintf(buffer, sizeof(buffer), "%02d/%02d/%04d %02d:%02d:%02d Temp:%0dC RH:%d%%", // customize
            now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second(),
            static_cast<int>(dht.readTemperature()), static_cast<int>(dht.readHumidity()));
   return String(buffer);
