@@ -1,0 +1,111 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <Adafruit_GFX.h>
+#include <Max72xxPanel.h>
+#include <RTClib.h>
+
+RTC_DS3231 rtc;
+
+const byte LDR_PIN = A2;
+const byte DHT_PIN = 6; // Replace with the pin your DHT sensor is connected to
+const byte CS_PIN = A3;
+const byte H_DISPLAYS = 8; // Number of horizontal displays
+const byte V_DISPLAYS = 1; // Number of vertical displays
+
+DHT dht(DHT_PIN, DHT11);
+
+Max72xxPanel matrix = Max72xxPanel(CS_PIN, H_DISPLAYS, V_DISPLAYS);
+
+const byte WAIT = 60;
+const byte SPACER = 1;
+const byte FONT_WIDTH = 5 + SPACER;
+
+void setup() {
+  pinMode(LDR_PIN, INPUT_PULLUP);
+  Serial.begin(9600);
+  Serial.println(F(">> Arduino 64x8 LED Dot Matrix Clock with DHT11!"));
+  Serial.println(F(">> Use <dd/mm/yyyy hh:mm:ss> format to set clock's date and hour!"));
+
+  // Initialize RTC
+  if (!rtc.begin()) {
+    Serial.println(F("Couldn't find RTC"));
+    while (1);
+  }
+
+  if (rtc.lostPower()) {
+    Serial.println(F("RTC lost power, setting the time!"));
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Set the RTC to the date & time this sketch was compiled
+  }
+
+  // Print initial date and time to verify
+  DateTime now = rtc.now();
+  printDateTime(now);
+
+  // Set positions and rotations for 8 displays
+  for (byte i = 0; i < H_DISPLAYS; i++) {
+    matrix.setPosition(i, i, 0); // Horizontal arrangement
+    matrix.setRotation(i, 1); // Adjust rotation if needed
+  }
+
+  dht.begin();
+}
+
+void loop() {
+  byte ledIntensity = ledIntensitySelect(analogRead(LDR_PIN));
+  matrix.setIntensity(ledIntensity);
+  
+  // Update clock and display it
+  String output = outputStrClock();
+
+  for (int i = 0; i < FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER; i++) {
+    matrix.fillScreen(LOW);
+    output = outputStrClock(); // Ensure output string is updated before each loop
+    int letter = i / FONT_WIDTH;
+    int x = (matrix.width() - 1) - i % FONT_WIDTH;
+    int y = (matrix.height() - 8) / 2;
+    while (x + FONT_WIDTH - SPACER >= 0 && letter >= 0) {
+      if (letter < output.length()) {
+        matrix.drawChar(x, y, output[letter], HIGH, LOW, 1);
+      }
+      letter--;
+      x -= FONT_WIDTH;
+    }
+    matrix.write();
+    delay(WAIT);
+  }
+  
+  // Print temperature and humidity to Serial Monitor for debugging
+  Serial.print(F("Temperature: "));
+  Serial.println(dht.readTemperature());
+  Serial.print(F("Humidity: "));
+  Serial.println(dht.readHumidity());
+}
+
+byte ledIntensitySelect(int value) {
+  return map(value, 0, 1023, 8, 0);
+}
+
+String outputStrClock() {
+  DateTime now = rtc.now();
+  char buffer[40];
+  snprintf(buffer, sizeof(buffer), "%02d/%02d/%04d %02d:%02d:%02d Temp:%0dC RH:%d%%", 
+           now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second(),
+           static_cast<int>(dht.readTemperature()), static_cast<int>(dht.readHumidity()));
+  return String(buffer);
+}
+
+void printDateTime(const DateTime& dt) {
+  char datestring[20];
+  snprintf_P(datestring, 
+             sizeof(datestring),
+             PSTR("%02u/%02u/%04u %02u:%02u:%02u"),
+             dt.day(),
+             dt.month(),
+             dt.year(),
+             dt.hour(),
+             dt.minute(),
+             dt.second());
+  Serial.print(datestring);
+  Serial.println();
+}
